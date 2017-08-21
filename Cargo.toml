@@ -8,8 +8,8 @@ authors = ["Bernhard Schuster <bernhard@ahoi.io>",
 
 [dependencies]
 # cuticula = { path = "../cuticula", default-features = false }
-juice = { path = "../juice", default-features = false, version = "0.2.2" }
-coaster = { path = "../coaster", default-features = false, version = "0.1.0" }
+juice = { default-features = false, version = "0.2.2" }
+coaster = { default-features = false, version = "0.1.0" }
 
 csv = "0.15"
 hyper = "0.11"
