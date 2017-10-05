@@ -14,13 +14,19 @@ use std::sync::{Arc, RwLock};
 use hyper::Client;
 use hyper::Uri;
 use hyper::Body;
+
+
+extern crate hyper_tls;
+use hyper_tls::HttpsConnector;
+use hyper::client::Config;
+
 use std::str::FromStr;
 use futures::Future;
 use futures::Stream;
 use futures::future;
 
 use docopt::Docopt;
-use csv::{Reader};
+use csv::Reader;
 
 
 extern crate env_logger;
@@ -72,73 +78,109 @@ fn main() {
     env_logger::init().unwrap();
     // Parse Arguments
     let args: MainArgs = Docopt::new(MAIN_USAGE)
-                            .and_then(|d| d.decode())
-                            .unwrap_or_else(|e| e.exit());
+        .and_then(|d| d.decode())
+        .unwrap_or_else(|e| e.exit());
 
     if args.cmd_load_dataset {
         match &*args.arg_dataset_name.unwrap() {
             "mnist" => {
                 let datasets = ["mnist_test.csv", "mnist_train.csv"];
                 for (i, v) in datasets.iter().enumerate() {
-                    println!("Downloading... {}/{}: {}", i+1, datasets.len(), v);
-                    let mut body = String::new();
+                    println!("Downloading... {}/{}: {}", i + 1, datasets.len(), v);
 
-                    let uri = Uri::from_str(&format!("http://pjreddie.com/media/files/{}", v)).unwrap();
+                    let uri = Uri::from_str(&format!("https://pjreddie.com/media/files/{}", v))
+                        .unwrap();
+
                     let mut core = tokio_core::reactor::Core::new().unwrap();
-                    let response = Client::new(&core.handle())
-                        .get(uri)
-                        .wait().unwrap();
-                    let body : Vec<u8> = response.body().fold(Vec::new(), |mut acc, chunk| {
-                                                            acc.extend_from_slice(&*chunk);
-                                                            future::ok::<_,hyper::Error>(acc)
-                                                        }).wait().unwrap();
-                    File::create(format!("assets/{}", v))
-                        .unwrap()
-                        .write_all(&body as &[u8]);
+                    let handle = core.handle();
+                    let client = Client::configure()
+                        .connector(HttpsConnector::new(4, &handle).unwrap())
+                        .build(&handle);
+
+                    // let work = client
+                    //     .get(uri).and_then(|response| {
+
+                    //         response.body().fold(Vec::new(), |mut acc, chunk| {
+                    //                                         acc.extend_from_slice(&*chunk);
+                    //                                         future::ok::<_,hyper::Error>(acc)
+                    //                                     }).and_then(|body| {
+
+                    //     File::create(format!("assets/{}", v))
+                    //         .unwrap()
+                    //         .write_all(&body as &[u8])
+                    //         .map(|_| ())
+                    //         .map_err(From::from)
+                    //     });
+                    // });
+                    let work = client.get(uri).and_then(|res| {
+                        println!("Response: {}", res.status());
+
+                        res.body().for_each(|chunk| {
+                            File::create(format!("assets/{}", v))
+                                .unwrap()
+                                .write_all(&chunk)
+                                .map(|_| ())
+                                .map_err(From::from)
+                        })
+                    });
+
+                    core.run(work).unwrap();
+                    println!("gamma");
                 }
                 println!("{}", "MNIST dataset downloaded".to_string())
-            },
-            _ => println!("{}", "Failed to download MNIST dataset!".to_string())
+            }
+            _ => println!("{}", "Failed to download MNIST dataset!".to_string()),
         }
     } else if args.cmd_mnist {
-        #[cfg(all(feature="cuda"))]
-        run_mnist(args.arg_model_name, args.arg_batch_size, args.arg_learning_rate, args.arg_momentum);
-        #[cfg(not(feature="cuda"))] {
-            println!("Right now, you really need cuda! Not all features are available for all backends and as such, this one -as of now - only works with cuda.");
+        #[cfg(all(feature = "cuda"))]
+        run_mnist(
+            args.arg_model_name,
+            args.arg_batch_size,
+            args.arg_learning_rate,
+            args.arg_momentum,
+        );
+        #[cfg(not(feature = "cuda"))]
+        {
+            println!(
+                "Right now, you really need cuda! Not all features are available for all backends and as such, this one -as of now - only works with cuda."
+            );
             panic!()
         }
     }
 }
 
 
-#[cfg(all(feature="cuda"))]
-fn run_mnist(model_name: Option<String>, batch_size: Option<usize>, learning_rate: Option<f32>, momentum: Option<f32>) {
+#[cfg(all(feature = "cuda"))]
+fn run_mnist(
+    model_name: Option<String>,
+    batch_size: Option<usize>,
+    learning_rate: Option<f32>,
+    momentum: Option<f32>,
+) {
     let mut rdr = Reader::from_file("assets/mnist_train.csv").unwrap();
-    let mut decoded_images = rdr.decode().map(|row|
-        match row {
-            Ok(value) => {
-                let row_vec: Box<Vec<u8>> = Box::new(value);
-                let label = row_vec[0];
-                let mut pixels = vec![0u8; 784];
-                for (place, element) in pixels.iter_mut().zip(row_vec.iter().skip(1)) {
-                    *place = *element;
-                }
-                // TODO: reintroduce Cuticula
-                // let img = Image::from_luma_pixels(28, 28, pixels);
-                // match img {
-                //     Ok(in_img) => {
-                //         println!("({}): {:?}", label, in_img.transform(vec![28, 28]));
-                //     },
-                //     Err(_) => unimplemented!()
-                // }
-                (label, pixels)
-            },
-            _ => {
-                println!("no value");
-                panic!();
+    let mut decoded_images = rdr.decode().map(|row| match row {
+        Ok(value) => {
+            let row_vec: Box<Vec<u8>> = Box::new(value);
+            let label = row_vec[0];
+            let mut pixels = vec![0u8; 784];
+            for (place, element) in pixels.iter_mut().zip(row_vec.iter().skip(1)) {
+                *place = *element;
             }
+            // TODO: reintroduce Cuticula
+            // let img = Image::from_luma_pixels(28, 28, pixels);
+            // match img {
+            //     Ok(in_img) => {
+            //         println!("({}): {:?}", label, in_img.transform(vec![28, 28]));
+            //     },
+            //     Err(_) => unimplemented!()
+            // }
+            (label, pixels)
         }
-    );
+        _ => {
+            println!("no value");
+            panic!();
+        }
+    });
 
     let batch_size = batch_size.unwrap_or(1);
     let learning_rate = learning_rate.unwrap_or(0.001f32);
@@ -150,23 +192,62 @@ fn run_mnist(model_name: Option<String>, batch_size: Option<usize>, learning_rat
 
     match &*model_name.unwrap_or("none".to_owned()) {
         "conv" => {
-            net_cfg.add_layer(LayerConfig::new("reshape", ReshapeConfig::of_shape(&[batch_size, 1, 28, 28])));
-            net_cfg.add_layer(LayerConfig::new("conv", ConvolutionConfig { num_output: 20, filter_shape: vec![5], padding: vec![0], stride: vec![1] }));
-            net_cfg.add_layer(LayerConfig::new("pooling", PoolingConfig { mode: PoolingMode::Max, filter_shape: vec![2], padding: vec![0], stride: vec![2] }));
-            net_cfg.add_layer(LayerConfig::new("linear1", LinearConfig { output_size: 500 }));
+            net_cfg.add_layer(LayerConfig::new(
+                "reshape",
+                ReshapeConfig::of_shape(&[batch_size, 1, 28, 28]),
+            ));
+            net_cfg.add_layer(LayerConfig::new(
+                "conv",
+                ConvolutionConfig {
+                    num_output: 20,
+                    filter_shape: vec![5],
+                    padding: vec![0],
+                    stride: vec![1],
+                },
+            ));
+            net_cfg.add_layer(LayerConfig::new(
+                "pooling",
+                PoolingConfig {
+                    mode: PoolingMode::Max,
+                    filter_shape: vec![2],
+                    padding: vec![0],
+                    stride: vec![2],
+                },
+            ));
+            net_cfg.add_layer(LayerConfig::new(
+                "linear1",
+                LinearConfig { output_size: 500 },
+            ));
             net_cfg.add_layer(LayerConfig::new("sigmoid", LayerType::Sigmoid));
-            net_cfg.add_layer(LayerConfig::new("linear2", LinearConfig { output_size: 10 }));
-        },
-        "mlp" => {
-            net_cfg.add_layer(LayerConfig::new("reshape", LayerType::Reshape(ReshapeConfig::of_shape(&[batch_size, 784]))));
-            net_cfg.add_layer(LayerConfig::new("linear1", LayerType::Linear(LinearConfig { output_size: 1568 })));
-            net_cfg.add_layer(LayerConfig::new("sigmoid", LayerType::Sigmoid));
-            net_cfg.add_layer(LayerConfig::new("linear2", LayerType::Linear(LinearConfig { output_size: 10 })));
-        },
-        "linear" => {
-            net_cfg.add_layer(LayerConfig::new("linear", LayerType::Linear(LinearConfig { output_size: 10 })));
+            net_cfg.add_layer(LayerConfig::new(
+                "linear2",
+                LinearConfig { output_size: 10 },
+            ));
         }
-        _ => { panic!("Unknown model. Try one of [linear, mlp, conv]")}
+        "mlp" => {
+            net_cfg.add_layer(LayerConfig::new(
+                "reshape",
+                LayerType::Reshape(
+                    ReshapeConfig::of_shape(&[batch_size, 784]),
+                ),
+            ));
+            net_cfg.add_layer(LayerConfig::new(
+                "linear1",
+                LayerType::Linear(LinearConfig { output_size: 1568 }),
+            ));
+            net_cfg.add_layer(LayerConfig::new("sigmoid", LayerType::Sigmoid));
+            net_cfg.add_layer(LayerConfig::new(
+                "linear2",
+                LayerType::Linear(LinearConfig { output_size: 10 }),
+            ));
+        }
+        "linear" => {
+            net_cfg.add_layer(LayerConfig::new(
+                "linear",
+                LayerType::Linear(LinearConfig { output_size: 10 }),
+            ));
+        }
+        _ => panic!("Unknown model. Try one of [linear, mlp, conv]"),
     }
     net_cfg.add_layer(LayerConfig::new("log_softmax", LayerType::LogSoftmax));
 
@@ -183,7 +264,12 @@ fn run_mnist(model_name: Option<String>, batch_size: Option<usize>, learning_rat
     let native_backend = ::std::rc::Rc::new(Backend::<Native>::default().unwrap());
 
     // set up solver
-    let mut solver_cfg = SolverConfig { minibatch_size: batch_size, base_lr: learning_rate, momentum: momentum, .. SolverConfig::default() };
+    let mut solver_cfg = SolverConfig {
+        minibatch_size: batch_size,
+        base_lr: learning_rate,
+        momentum: momentum,
+        ..SolverConfig::default()
+    };
     solver_cfg.network = LayerConfig::new("network", net_cfg);
     solver_cfg.objective = LayerConfig::new("classifier", classifier_cfg);
     let mut solver = Solver::from_config(backend.clone(), backend.clone(), &solver_cfg);
@@ -216,6 +302,10 @@ fn run_mnist(model_name: Option<String>, batch_size: Option<usize>, learning_rat
         let predictions = confusion.get_predictions(&mut infered);
 
         confusion.add_samples(&predictions, &targets);
-        println!("Last sample: {} | Accuracy {}", confusion.samples().iter().last().unwrap(), confusion.accuracy());
+        println!(
+            "Last sample: {} | Accuracy {}",
+            confusion.samples().iter().last().unwrap(),
+            confusion.accuracy()
+        );
     }
 }
