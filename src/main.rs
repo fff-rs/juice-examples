@@ -436,6 +436,10 @@ fn run_fashion(
                 "linear1",
                 LinearConfig { output_size: 500 },
             ));
+            net_cfg.add_layer(LayerConfig::new(
+                "dropout",
+                DropoutConfig { probability: 0.8, seed: 42 },
+            ));
             net_cfg.add_layer(LayerConfig::new("sigmoid", LayerType::Sigmoid));
             net_cfg.add_layer(LayerConfig::new(
                 "linear2",
