@@ -173,7 +173,7 @@ fn main() {
             _ => println!("{}", "Failed to download MNIST dataset!".to_string()),
         }
     } else if args.cmd_mnist {
-        #[cfg(all(feature = "cuda"))]
+        #[cfg(any(feature = "cuda", feature = "native"))]
         run_mnist(
             args.arg_model_name,
             args.arg_batch_size,
@@ -205,7 +205,7 @@ fn main() {
     }
 }
 
-#[cfg(all(feature = "cuda"))]
+#[cfg(any(feature = "cuda", feature = "native"))]
 fn run_mnist(
     model_name: Option<String>,
     batch_size: Option<usize>,
@@ -323,7 +323,10 @@ fn run_mnist(
     classifier_cfg.add_layer(nll_cfg);
 
     // set up backends
+    #[cfg(feature = "cuda")]
     let backend = ::std::rc::Rc::new(Backend::<Cuda>::default().unwrap());
+    #[cfg(feature = "native")]
+    let backend = ::std::rc::Rc::new(Backend::<Native>::default().unwrap());
     // let native_backend = ::std::rc::Rc::new(Backend::<Native>::default().unwrap());
 
     // set up solver
