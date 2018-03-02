@@ -161,11 +161,11 @@ fn main() {
                     "t10k-images-idx3-ubyte.gz",
                     "t10k-labels-idx1-ubyte.gz",
                 ];
-                // download_datasets(
-                //     &datasets,
-                //     "http://fashion-mnist.s3-website.eu-central-1.amazonaws.com",
-                // );
-                // println!("{}", "Fashion MNIST dataset downloaded".to_string());
+                download_datasets(
+                    &datasets,
+                    "http://fashion-mnist.s3-website.eu-central-1.amazonaws.com",
+                );
+                println!("{}", "Fashion MNIST dataset downloaded".to_string());
                 // TODO avoid repeated effort here
                 unzip_datasets(&datasets);
                 println!("{}", "Fashion MNIST dataset decompressed".to_string());
