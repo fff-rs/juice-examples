@@ -161,11 +161,11 @@ fn main() {
                     "t10k-images-idx3-ubyte.gz",
                     "t10k-labels-idx1-ubyte.gz",
                 ];
-                // download_datasets(
-                //     &datasets,
-                //     "http://fashion-mnist.s3-website.eu-central-1.amazonaws.com",
-                // );
-                // println!("{}", "Fashion MNIST dataset downloaded".to_string());
+                download_datasets(
+                    &datasets,
+                    "http://fashion-mnist.s3-website.eu-central-1.amazonaws.com",
+                );
+                println!("{}", "Fashion MNIST dataset downloaded".to_string());
                 // TODO avoid repeated effort here
                 unzip_datasets(&datasets);
                 println!("{}", "Fashion MNIST dataset decompressed".to_string());
@@ -173,39 +173,39 @@ fn main() {
             _ => println!("{}", "Failed to download MNIST dataset!".to_string()),
         }
     } else if args.cmd_mnist {
-        #[cfg(all(feature = "cuda"))]
+        #[cfg(any(feature = "cuda", feature = "native"))]
         run_mnist(
             args.arg_model_name,
             args.arg_batch_size,
             args.arg_learning_rate,
             args.arg_momentum,
         );
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(any(feature = "cuda", feature = "native")))]
         {
             println!(
-                "Right now, you really need cuda! Not all features are available for all backends and as such, this one -as of now - only works with cuda."
+                "Right now, you really need cuda or to build with native features! Not all features are available for all backends and as such, this one -as of now - only works with cuda or native."
             );
             panic!()
         }
     } else if args.cmd_fashion {
-        #[cfg(all(feature = "cuda"))]
+        #[cfg(any(feature = "cuda", feature = "native"))]
         run_fashion(
             args.arg_model_name,
             args.arg_batch_size,
             args.arg_learning_rate,
             args.arg_momentum,
         );
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(any(feature = "cuda", feature = "native")))]
         {
             println!(
-                "Right now, you really need cuda! Not all features are available for all backends and as such, this one -as of now - only works with cuda."
+                "Right now, you really need cuda or to build with native features! Not all features are available for all backends and as such, this one -as of now - only works with cuda or native."
             );
             panic!()
         }
     }
 }
 
-#[cfg(all(feature = "cuda"))]
+#[cfg(any(feature = "cuda", feature = "native"))]
 fn run_mnist(
     model_name: Option<String>,
     batch_size: Option<usize>,
@@ -323,8 +323,10 @@ fn run_mnist(
     classifier_cfg.add_layer(nll_cfg);
 
     // set up backends
+    #[cfg(feature = "cuda")]
     let backend = ::std::rc::Rc::new(Backend::<Cuda>::default().unwrap());
-    // let native_backend = ::std::rc::Rc::new(Backend::<Native>::default().unwrap());
+    #[cfg(feature = "native")]
+    let backend = ::std::rc::Rc::new(Backend::<Native>::default().unwrap());
 
     // set up solver
     let mut solver_cfg = SolverConfig {
@@ -373,7 +375,7 @@ fn run_mnist(
     }
 }
 
-#[cfg(all(feature = "cuda"))]
+#[cfg(any(feature = "cuda", feature = "native"))]
 fn run_fashion(
     model_name: Option<String>,
     batch_size: Option<usize>,
@@ -478,8 +480,11 @@ fn run_fashion(
     classifier_cfg.add_layer(nll_cfg);
 
     // set up backends
+    // set up backends
+    #[cfg(feature = "cuda")]
     let backend = ::std::rc::Rc::new(Backend::<Cuda>::default().unwrap());
-    // let native_backend = ::std::rc::Rc::new(Backend::<Native>::default().unwrap());
+    #[cfg(feature = "native")]
+    let backend = ::std::rc::Rc::new(Backend::<Native>::default().unwrap());
 
     // set up solver
     let mut solver_cfg = SolverConfig {
