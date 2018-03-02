@@ -375,7 +375,7 @@ fn run_mnist(
     }
 }
 
-#[cfg(all(feature = "cuda"))]
+#[cfg(any(feature = "cuda", feature = "native"))]
 fn run_fashion(
     model_name: Option<String>,
     batch_size: Option<usize>,
