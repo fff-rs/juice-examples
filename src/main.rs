@@ -180,10 +180,10 @@ fn main() {
             args.arg_learning_rate,
             args.arg_momentum,
         );
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(any(feature = "cuda", feature = "native")))]
         {
             println!(
-                "Right now, you really need cuda! Not all features are available for all backends and as such, this one -as of now - only works with cuda."
+                "Right now, you really need cuda or to build with native features! Not all features are available for all backends and as such, this one -as of now - only works with cuda or native."
             );
             panic!()
         }
